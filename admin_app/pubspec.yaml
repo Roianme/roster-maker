@@ -1,0 +1,27 @@
+name: roster_maker_admin
+description: Admin-only roster generator (Flutter Web) for Melbourne venues.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  # Firebase packages -- keep aligned manually (e.g., `flutter pub upgrade firebase_core firebase_auth cloud_firestore`);
+  # `flutterfire configure` regenerates firebase_options.dart only.
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.15.7
+  http: ^1.2.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true

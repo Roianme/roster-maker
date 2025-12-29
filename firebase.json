@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "frontend/build/web",
+    "public": "admin_app/build/web",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -12,9 +12,5 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "firestore": {
-    "rules": "firebase/firestore.rules",
-    "indexes": "firebase/firestore.indexes.json"
   }
 }
