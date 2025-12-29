@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
+  # Firebase packages -- keep aligned manually (e.g., `flutter pub upgrade firebase_core firebase_auth cloud_firestore`);
+  # `flutterfire configure` regenerates firebase_options.dart only.
   firebase_core: ^2.27.0
   firebase_auth: ^4.17.4
   cloud_firestore: ^4.15.7

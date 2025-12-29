@@ -1,3 +1,4 @@
+import os
 from datetime import date, time
 from typing import Dict, List, Optional
 
@@ -88,6 +89,7 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
 
     model = cp_model.CpModel()
     slot_ids = [s.slotId for s in req.shiftSlots]
+    slot_index: Dict[str, int] = {slot_id: idx for idx, slot_id in enumerate(slot_ids)}
     staff_index: Dict[str, int] = {s.id: idx for idx, s in enumerate(staff_list)}
     unfilled_idx = staff_index[UNFILLED_ID]
 
@@ -109,12 +111,11 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
 
     # Locked assignments
     for slot_id, staff_id in req.lockedAssignments.items():
-        if slot_id in slot_ids and staff_id in staff_index:
-            slot_idx = slot_ids.index(slot_id)
+        slot_idx = slot_index.get(slot_id)
+        if slot_idx is not None and staff_id in staff_index:
             for s_idx in range(len(staff_list)):
                 model.Add(
-                    x[(s_idx, slot_idx)]
-                    == int(staff_index[staff_id] == s_idx)
+                    x[(s_idx, slot_idx)] == int(staff_index[staff_id] == s_idx)
                 )
 
     # Stability variables
@@ -135,8 +136,24 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
     model.Minimize(1000 * unfilled_sum + 10 * stability_sum)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10
+    try:
+        max_seconds = float(os.getenv("MAX_SOLVER_SECONDS", "10"))
+    except ValueError:
+        max_seconds = 10.0
+    solver.parameters.max_time_in_seconds = max_seconds
     result = solver.Solve(model)
+
+    if result not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        fallback_assignments = {slot.slotId: UNFILLED_ID for slot in req.shiftSlots}
+        fallback_reasons = [
+            SlotReason(slotId=slot.slotId, reason="No feasible solution found")
+            for slot in req.shiftSlots
+        ]
+        return OptimizeResponse(
+            assignments=fallback_assignments,
+            unfilled=list(fallback_assignments.keys()),
+            reasons=fallback_reasons,
+        )
 
     assignments: Dict[str, str] = {}
     reasons: List[SlotReason] = []

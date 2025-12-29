@@ -1,5 +1,6 @@
 param(
-    [string]$FirebaseProject = "your-project-id"
+    [Parameter(Mandatory = $true)]
+    [string]$FirebaseProject
 )
 
 Set-Location "$PSScriptRoot/../admin_app"

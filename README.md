@@ -38,6 +38,10 @@ Replace TODOs in `admin_app/lib/firebase_options.dart`.
 ```powershell
 .\scripts\dev.ps1
 ```
+Set the optimizer endpoint if not localhost:
+```powershell
+flutter run -d chrome --dart-define=OPTIMIZER_URL=https://your-optimizer-url
+```
 
 5) Deploy web to Firebase Hosting:
 ```powershell

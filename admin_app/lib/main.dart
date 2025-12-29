@@ -9,6 +9,9 @@ import 'package:intl/intl.dart';
 
 import 'firebase_options.dart';
 
+const optimizerBaseUrl =
+    String.fromEnvironment('OPTIMIZER_URL', defaultValue: 'http://localhost:8000');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -145,6 +148,8 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
   DateTime weekStart = _startOfWeek(DateTime.now());
   Map<String, String> assignments = {};
   List<SlotReason> reasons = [];
+  List<ShiftSlotView> _cachedSlots = [];
+  String _cachedSlotsKey = '';
 
   @override
   void initState() {
@@ -158,8 +163,17 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  List<ShiftSlotView> _getSlots() {
+    final key = '${weekStart.toIso8601String()}-${templates.length}';
+    if (_cachedSlotsKey != key) {
+      _cachedSlots = _expandTemplates(templates, weekStart);
+      _cachedSlotsKey = key;
+    }
+    return _cachedSlots;
+  }
+
   Future<void> _generateRoster() async {
-    final shiftSlots = _expandTemplates(templates, weekStart);
+    final shiftSlots = _getSlots();
     final body = {
       'staff': staff.map((s) => s.toJson()).toList(),
       'shiftSlots': shiftSlots.map((s) => s.toJson()).toList(),
@@ -167,11 +181,12 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
       'lastApprovedAssignments': assignments,
     };
     final response = await http.post(
-      Uri.parse('http://localhost:8000/optimize'),
+      Uri.parse('$optimizerBaseUrl/optimize'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(body),
     );
-    if (response.statusCode == 200) {
+    final success = response.statusCode >= 200 && response.statusCode < 300;
+    if (success) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       setState(() {
         assignments = (data['assignments'] as Map<String, dynamic>)
@@ -183,22 +198,23 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate roster: ${response.body}')),
+          const SnackBar(
+            content: Text('Failed to generate roster. Check optimizer logs.'),
+          ),
         );
       }
     }
   }
 
   void _exportCsv() {
-    final shiftSlots = _expandTemplates(templates, weekStart);
+    final shiftSlots = _getSlots();
+    final staffLookup = {for (final s in staff) s.id: s.name};
     final buffer = StringBuffer();
     buffer.writeln(
         'VenueName,Date,Start,End,Role,EmployeeName,SlotId,Notes');
     for (final slot in shiftSlots) {
       final assignedId = assignments[slot.slotId] ?? '';
-      final assignedName =
-          staff.firstWhere((s) => s.id == assignedId, orElse: () => StaffMember.empty())
-              .name;
+      final assignedName = staffLookup[assignedId] ?? '';
       buffer.writeln(
           '${slot.venueName},${slot.date},${slot.start},${slot.end},${slot.role},$assignedName,${slot.slotId},');
     }
@@ -219,6 +235,7 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final currentSlots = _getSlots();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Roster Maker (Admin)'),
@@ -258,8 +275,8 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
             onAdd: (b) => setState(() => templates.add(b)),
           ),
           _RosterTab(
+            slots: currentSlots,
             weekStart: weekStart,
-            templates: templates,
             staff: staff,
             assignments: assignments,
             reasons: reasons,
@@ -629,8 +646,8 @@ class _TemplatesTabState extends State<_TemplatesTab> {
 
 class _RosterTab extends StatelessWidget {
   const _RosterTab({
+    required this.slots,
     required this.weekStart,
-    required this.templates,
     required this.staff,
     required this.assignments,
     required this.reasons,
@@ -638,8 +655,8 @@ class _RosterTab extends StatelessWidget {
     required this.onGenerate,
   });
 
+  final List<ShiftSlotView> slots;
   final DateTime weekStart;
-  final List<TemplateBlock> templates;
   final List<StaffMember> staff;
   final Map<String, String> assignments;
   final List<SlotReason> reasons;
@@ -648,7 +665,8 @@ class _RosterTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final slots = _expandTemplates(templates, weekStart);
+    final reasonMap = {for (final r in reasons) r.slotId: r.reason};
+    final staffNameMap = {for (final s in staff) s.id: s.name};
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -683,15 +701,12 @@ class _RosterTab extends StatelessWidget {
               itemBuilder: (_, i) {
                 final slot = slots[i];
                 final assignedId = assignments[slot.slotId] ?? '';
-                final assignedName = staff
-                        .firstWhere((s) => s.id == assignedId, orElse: () => StaffMember.empty())
-                        .name;
-                final reason =
-                    reasons.firstWhere((r) => r.slotId == slot.slotId, orElse: () => SlotReason(slot.slotId, ''));
+                final assignedName = staffNameMap[assignedId] ?? '';
+                final reason = reasonMap[slot.slotId] ?? '';
                 return Card(
                   child: ListTile(
                     title: Text('${slot.venueName} ${slot.date} ${slot.start}-${slot.end}'),
-                    subtitle: Text('${slot.role} • ${assignedName.isEmpty ? 'Unassigned' : assignedName}\n${reason.reason}'),
+                    subtitle: Text('${slot.role} • ${assignedName.isEmpty ? 'Unassigned' : assignedName}\n$reason'),
                   ),
                 );
               },
